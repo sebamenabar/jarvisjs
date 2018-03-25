@@ -6,6 +6,22 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC"
+  "author": "Sebastian Amenabar <samenabar@uc.cl>",
+  "license": "ISC",
+  "repository": "https://github.com/sebamenabar/Jarvis.js.git",
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-eslint": "^8.2.2",
+    "babel-preset-airbnb": "^2.4.0",
+    "babel-preset-flow": "^6.23.0",
+    "eslint": "4.9.0",
+    "eslint-config-airbnb-base": "^12.1.0",
+    "eslint-plugin-flowtype": "^2.46.1",
+    "eslint-plugin-import": "2.7.0",
+    "flow-bin": "^0.68.0"
+  },
+  "dependencies": {
+    "babel-preset-env": "^1.6.1",
+    "bluebird": "^3.5.1"
+  }
 }
