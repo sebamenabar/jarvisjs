@@ -3,6 +3,9 @@
     "airbnb-base",
     "plugin:flowtype/recommended"
   ],
+  "rules": {
+    "no-console": "off"
+  },
   "parser": "babel-eslint",
   "plugins": [
     "flowtype"
