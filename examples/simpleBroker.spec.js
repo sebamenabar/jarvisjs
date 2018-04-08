@@ -13,7 +13,8 @@ async function sendMessage(recipient, message) {
 // contains the sendMessage method by default
 async function botLogic(user, message, broker = { sendMessage }) {
   const response = `User ${user.id} sent ${message}`;
-  return broker.sendMessage(user.id, response);
+  return broker.sendMessage(user.id, response)
+    .then(() => broker.sendMessage(user.id, 'BOT LOGIC END'));
 }
 
 // Create a class that inherits from Jarvis
@@ -38,6 +39,11 @@ class MessageBroker extends Jarvis {
 
   // Define a method that simulates the user sending a message
   userSends(user, message) {
+    // Tell jarvis that the
+    // bot logic should finish with no more
+    // messages on stack
+    super.end();
+
     // In this case, my logic function receives the broker as
     // a parameter and returns a promise
     const logicPromise = botLogic(user, message, this);
@@ -51,23 +57,17 @@ class MessageBroker extends Jarvis {
   // Define a method that simulates the bot sending a message
   async botSends(recipient, message) {
     // We tell Jarvis we are expecting a message for the recipient
-    super.receiveMessage(recipient.id)
-      .then((response) => {
-        // Here use your favorite Unit Testing library,
-        // here I'm just using Jasmine's syntax because
-        // I'm familiar with it
-        // Received message has the form:
-        // {resolve, message, recipient}
-        expect(response.message).toEqual(message);
-        return Promise.resolve();
-      })
-      // Currently the promise is only rejected when the bot
-      // finishes it's logic
-      .catch((logicResult) => {
-        const error = new Error(`Expecting message '${message}' for user ${recipient}, but the bot finished with result ${logicResult}`);
-        error.name = 'botLogicDoneWithoutMessage';
-        return Promise.reject(error);
-      });
+    const response = super.receiveMessage(recipient.id);
+    // Here use your favorite Unit Testing library,
+    // here I'm just using Jasmine's syntax because
+    // I'm familiar with it
+    // Received message has the form:
+    // {resolve, message, recipient}
+    expect(response.message).toEqual(message);
+  }
+
+  end() {
+    super.end();
   }
 }
 
@@ -79,17 +79,17 @@ describe('Simple example', () => {
     const jarvis = new MessageBroker();
 
     const message = 'Hi';
-    const logicPromise = jarvis.userSends(user, message);
+    jarvis.userSends(user, message);
 
     const response = `User ${user.id} sent ${message}`;
-    jarvis.botSends(user, response)
-      .then(() => {
-        // We wait for everything to finish correctly
-        logicPromise.then(() => done());
-      }).catch(fail);
+    jarvis.botSends(user, response);
+    jarvis.botSends(user, 'BOT LOGIC END');
+    jarvis.end();
+
+    done();
   });
 
-  it('fails when entered an incorrect message', (done) => {
+  xit('fails when entered an incorrect message', (done) => {
     const jarvis = new MessageBroker();
 
     const message = 'Hi';

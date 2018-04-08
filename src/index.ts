@@ -1,9 +1,9 @@
-import Promise from 'bluebird';
-import EventEmitter from 'events';
+import { EventEmitter } from "events";
 
-const promiseTimeout = (ms, promise, error) => {
+
+const promiseTimeout = (ms: number, promise: Promise<any>, error: Error): Promise<any> => {
   // Create a promise that rejects in <ms> milliseconds
-  const timeout = new Promise((resolve, reject) => {
+  const timeout = new Promise((resolve: Function, reject: Function) => {
     const id = setTimeout(() => {
       clearTimeout(id);
       reject(error);
@@ -19,7 +19,19 @@ const promiseTimeout = (ms, promise, error) => {
 
 
 export default class Jarvis {
-  constructor(timeout = 1000) {
+	botLogic: any;
+	logicTimoutError: Error;
+	timeout: number;
+	logicPromise: Promise<any> | null;
+	emitter: EventEmitter;
+	queue: {
+    [key: string]: {
+      resolve: Function,
+      message: any,
+      recipient: any
+    }[]
+  };
+  constructor(timeout: number = 1000) {
     // The received messages will be serially saved in the queue
     this.queue = {};
     // To know when the bot sends a new messages, or finishes the logic
@@ -38,7 +50,9 @@ export default class Jarvis {
   }
 
   // This method will override the bot logic's send message method
-  async sendMessage({ recipient, message, resolveValue }) {
+  // async sendMessage <string | number, any, any> (recipient, message, resolveValue) {
+  async sendMessage(recipient: string | number, message: any, resolveValue?: any) {
+    recipient = recipient.toString();
     // Create the queue for the user messages if it does not exist
     if (!this.queue[recipient]) this.queue[recipient] = [];
     // We create a promise so that we can await
@@ -65,10 +79,10 @@ export default class Jarvis {
     return Promise.resolve(resolveValue);
   }
 
-  userSends(logicPromise) {
+  userSends(logicPromise: any) {
     // In case the logic finishes while we are waiting for a message
     // we add a an event emission on finish
-    logicPromise.then((result) => {
+    logicPromise.then((result: any) => {
       this.emitter.emit('logicDone', result);
     });
 
@@ -77,13 +91,14 @@ export default class Jarvis {
 
   // This method tries to fetch the next message that
   // recipient will receive
-  async receiveMessage(recipient) {
+  async receiveMessage(recipient: number | string) {
+    recipient = recipient.toString();
     let message;
     if (this.queue[recipient] && this.queue[recipient].length) {
       message = this.queue[recipient].shift();
       // And we resolve the message, so the await in sendMessage
       // is resolved and the bot's logic continues
-      (message.resolve)();
+      (message!.resolve)();
       // Finally we resolve the message
       return message;
     }
@@ -94,10 +109,11 @@ export default class Jarvis {
       this.emitter.once('logicDone', (result) => {
         // If the logic finished we reject, because we were
         // expecting a message
-        const error = new Error(`Expecting message for ${recipient} but the logic finished`);
+        const error = <any> new Error(`Expecting message for ${recipient} but the logic finished`);
         error.params.result = result;
         reject(error);
-      }).listen('sentMessage', (newMessageRecipient, resolveNewMessage) => {
+      }).addListener('sentMessage', (newMessageRecipient: string | number, resolveNewMessage: Function) => {
+        newMessageRecipient = newMessageRecipient.toString();
         // If we receive a message we check if it is for
         // the user that we are expecting
         if (newMessageRecipient === recipient) {
@@ -121,9 +137,9 @@ export default class Jarvis {
     let res;
     if (this.botLogic) res = await promiseTimeout(1000, this.botLogic, this.logicTimoutError);
 
-    Object.values(this.queue).forEach((queue) => {
+    Object.keys(this.queue).map((key) => this.queue[key]).forEach((queue: {}[]) => {
       if (queue.length > 0) {
-        const error = new Error('Bot logic ended but still some messages in queue');
+        const error = <any> new Error('Bot logic ended but still some messages in queue');
         error.params.queue = this.queue;
         throw error;
       }
