@@ -216,8 +216,8 @@ export class Jabric {
   resolve: Function;
   reject: Function;
   future: any;
-  currentResolve: Function;
-  currentRecipient: string | number;
+  currentResolve: Function | undefined;
+  currentRecipient: string | number | undefined;
   constructor(timeout: number = 1000) {
     this.queue = {};
     this.emitter = new EventEmitter();
@@ -228,13 +228,11 @@ export class Jabric {
 
   start(fn: Function) {
     const future = Future.task(() => fn());
-    future.detach();
-    this.future = future;
+    return future.detach();
   }
 
   sendMessage(recipient: string | number, message: any, resolveValue?: any) {
     recipient = recipient.toString();
-    console.log('Jabric sending message to ' + recipient);
     if (!this.queue[recipient]) this.queue[recipient] = [];
     const receiveMessagePromise = new Promise((resolve) => {
       this.queue[recipient].push({
@@ -253,19 +251,42 @@ export class Jabric {
 
   botSends(recipient: string | number) {
     recipient = recipient.toString();
-    console.log('Retrieving message for ' + recipient);
-    const future = new Future();
+    let message;
     if(this.currentRecipient === recipient) {
-      const message = this.queue[recipient].shift();
+      message = this.queue[recipient].shift();
       (message!.resolve)();
-      future.return(message!.message);
-      console.log('Jabric found message for ' + recipient);
+      this.currentRecipient = undefined;
+      this.currentResolve = undefined;
+      return message!.message;
     }
+
+    const future = new Future();
+
+    this.emitter.once('sentMessage', (newMessageRecipient: string | number, resolveNewMessage: Function) => {
+      if (newMessageRecipient === recipient) {
+        message = this.queue[recipient].shift();
+        this.emitter.removeAllListeners();
+        future.return(message!.message);
+      }
+
+      resolveNewMessage();
+      this.currentRecipient = undefined;
+      this.currentResolve = undefined;
+    });
 
     return future.wait();
   }
 
   userSends(logicPromise: Promise<any>) {
+    if (this.future) this.future.wait();
+    this.future = new Future();
     this.logicPromise = logicPromise;
+    logicPromise.catch((err) => {
+      this.future.throw(err);
+    });
+  }
+
+  end() {
+    return this.future.wait();
   }
 }

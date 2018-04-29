@@ -182,12 +182,10 @@ class Jabric {
     }
     start(fn) {
         const future = Future.task(() => fn());
-        future.detach();
-        this.future = future;
+        return future.detach();
     }
     sendMessage(recipient, message, resolveValue) {
         recipient = recipient.toString();
-        console.log('Jabric sending message to ' + recipient);
         if (!this.queue[recipient])
             this.queue[recipient] = [];
         const receiveMessagePromise = new Promise((resolve) => {
@@ -202,18 +200,38 @@ class Jabric {
     }
     botSends(recipient) {
         recipient = recipient.toString();
-        console.log('Retrieving message for ' + recipient);
-        const future = new Future();
+        let message;
         if (this.currentRecipient === recipient) {
-            const message = this.queue[recipient].shift();
+            message = this.queue[recipient].shift();
             (message.resolve)();
-            future.return(message.message);
-            console.log('Jabric found message for ' + recipient);
+            this.currentRecipient = undefined;
+            this.currentResolve = undefined;
+            return message.message;
         }
+        const future = new Future();
+        this.emitter.once('sentMessage', (newMessageRecipient, resolveNewMessage) => {
+            if (newMessageRecipient === recipient) {
+                message = this.queue[recipient].shift();
+                this.emitter.removeAllListeners();
+                future.return(message.message);
+            }
+            resolveNewMessage();
+            this.currentRecipient = undefined;
+            this.currentResolve = undefined;
+        });
         return future.wait();
     }
     userSends(logicPromise) {
+        if (this.future)
+            this.future.wait();
+        this.future = new Future();
         this.logicPromise = logicPromise;
+        logicPromise.catch((err) => {
+            this.future.throw(err);
+        });
+    }
+    end() {
+        return this.future.wait();
     }
 }
 exports.Jabric = Jabric;

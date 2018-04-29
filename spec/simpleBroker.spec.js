@@ -21,7 +21,7 @@ class FakeBroker extends Jabric {
   }
 
   userSends(sender, message) {
-    botLogic(sender, message, this);
+    super.userSends(botLogic(sender, message, this));
   }
 
   sendMessage(recipient, message) {
@@ -46,6 +46,16 @@ describe('Simple example', () => {
     });
   });
 
+  fit('fails when backend fails', (done) => {
+    const jarvis = new FakeBroker();
+
+    return jarvis.start(() => {
+      jarvis.userSends(user, 'THROW');
+      jarvis.end();
+      done();
+    });
+  });
+
   it('fails when entered an incorrect message', (done) => {
     const jarvis = new FakeBroker();
 
@@ -57,12 +67,5 @@ describe('Simple example', () => {
     });
   });
 
-  it('fails when backend fails', (done) => {
-    const jarvis = new FakeBroker();
 
-    return jarvis.start(() => {
-      jarvis.userSends(user, 'THROW');
-      done();
-    });
-  });
 });
