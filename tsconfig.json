@@ -1,7 +1,7 @@
 {
     "compilerOptions": {
         "outDir": "./build/",
-        "sourceMap": false,
+        "sourceMap": true,
         "strictNullChecks": true,
         "noImplicitAny": true,
         "noImplicitThis": true,
@@ -9,8 +9,12 @@
         "module": "commonjs",
         "target": "es2015",
         "allowJs": true,
-        "types": ["node"]
+        "types": ["node"],
+        "watch": true
     },
+    "files": [
+        "src/typings/node-fibers.d.ts"
+    ],
     "include": [
         "./src/"
     ]

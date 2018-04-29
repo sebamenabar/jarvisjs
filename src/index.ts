@@ -1,5 +1,20 @@
-import { EventEmitter } from "events";
+import { EventEmitter } from 'events';
+import * as Future from 'fibers/future';
 
+const MORE_MESSAGES_THAN_EXPECTED = 'MORE_MESSAGES_THAN_EXPECTED';
+const BOTLOGIC_FINISHED = 'BOT_LOGIC_FINSHED';
+const BOTLOGIC_TIMEOUT = 'BOTLOGIC_TIMEOUT';
+
+const SECOND = 1000;
+class JarvisError extends Error {
+  code: string;
+  params: Object;
+  constructor(message: string, code: string, options?: {params: {}}) {
+    super(message);
+    this.code = code;
+    Object.assign(this, options);
+  }
+}
 
 const promiseTimeout = (ms: number, promise: Promise<any>, error: Error): Promise<any> => {
   // Create a promise that rejects in <ms> milliseconds
@@ -18,19 +33,22 @@ const promiseTimeout = (ms: number, promise: Promise<any>, error: Error): Promis
 };
 
 
-export default class Jarvis {
-	botLogic: any;
-	logicTimoutError: Error;
-	timeout: number;
-	logicPromise: Promise<any> | null;
-	emitter: EventEmitter;
-	queue: {
+export class Jarvis {
+  botLogic: any;
+  logicTimoutError: Error;
+  timeout: number;
+  logicPromise: Promise<any> | null;
+  emitter: EventEmitter;
+  queue: {
     [key: string]: {
       resolve: Function,
       message: any,
-      recipient: any
-    }[]
+      recipient: any,
+    }[],
   };
+  resolve: Function;
+  reject: Function;
+  future: any;
   constructor(timeout: number = 1000) {
     // The received messages will be serially saved in the queue
     this.queue = {};
@@ -47,6 +65,18 @@ export default class Jarvis {
     this.timeout = timeout;
 
     this.logicTimoutError = new Error('Timeout on waiting logic to finish on end');
+  }
+
+  async start(fn: Function) {
+    const promise = new Promise((resolve, reject) => {
+      this.resolve = resolve;
+      this.reject = reject;
+    });
+
+    const future = Future.task(() => fn());
+    future.detach();
+    this.future = future;
+    return promise;
   }
 
   // This method will override the bot logic's send message method
@@ -79,11 +109,16 @@ export default class Jarvis {
     return Promise.resolve(resolveValue);
   }
 
-  userSends(logicPromise: any) {
+  userSends(logicPromise: Promise<any>) {
     // In case the logic finishes while we are waiting for a message
     // we add a an event emission on finish
     logicPromise.then((result: any) => {
       this.emitter.emit('logicDone', result);
+    });
+
+    logicPromise.catch((err: Error) => {
+      this.future.throw(err);
+      this.reject(err);
     });
 
     this.logicPromise = logicPromise;
@@ -91,7 +126,9 @@ export default class Jarvis {
 
   // This method tries to fetch the next message that
   // recipient will receive
-  async receiveMessage(recipient: number | string) {
+  receiveMessage(recipient: number | string) {
+    const future = new Future();
+
     recipient = recipient.toString();
     let message;
     if (this.queue[recipient] && this.queue[recipient].length) {
@@ -109,7 +146,9 @@ export default class Jarvis {
       this.emitter.once('logicDone', (result) => {
         // If the logic finished we reject, because we were
         // expecting a message
-        const error = <any> new Error(`Expecting message for ${recipient} but the logic finished`);
+        const error = new JarvisError(
+          `Expecting message for ${recipient} but the logic finished`,
+          BOTLOGIC_FINISHED);
         error.params.result = result;
         reject(error);
       }).addListener('sentMessage', (newMessageRecipient: string | number, resolveNewMessage: Function) => {
@@ -122,28 +161,111 @@ export default class Jarvis {
           // We stop listening for new messages or
           // end of bot's logic
           this.emitter.removeAllListeners();
-          resolve();
+          resolve(message);
         }
         // And we resume the bot's logic
         resolveNewMessage();
       });
     });
 
-    await messagePromise;
-    return message;
+    messagePromise.then((resolvedMessage) => {
+      future.return(resolvedMessage);
+    }).catch((err) => {
+      this.reject(err);
+      future.throw(err);
+      this.future.throw(err);
+      throw err;
+    });
+    return future.wait();
   }
 
-  async end() {
+  async _end() {
     let res;
-    if (this.botLogic) res = await promiseTimeout(1000, this.botLogic, this.logicTimoutError);
+    if (this.botLogic) res = await promiseTimeout(SECOND, this.botLogic, this.logicTimoutError);
 
-    Object.keys(this.queue).map((key) => this.queue[key]).forEach((queue: {}[]) => {
+    Object.keys(this.queue).map(key => this.queue[key]).forEach((queue: {}[]) => {
       if (queue.length > 0) {
-        const error = <any> new Error('Bot logic ended but still some messages in queue');
-        error.params.queue = this.queue;
+        const error = new JarvisError(
+          'Bot logic ended but still some messages in queue', MORE_MESSAGES_THAN_EXPECTED,
+          { params: { queue: this.queue } });
+        this.reject(error);
+        this.future.throw(error);
         throw error;
       }
     });
+    this.resolve();
     return res;
+  }
+
+}
+
+
+export class Jabric {
+  botLogic: any;
+  logicTimeoutError: JarvisError;
+  timeout: number;
+  logicPromise: Promise<any> | null;
+  emitter: EventEmitter;
+  queue: {
+    [key: string]: {
+      resolve: Function,
+      message: any,
+      recipient: any,
+    }[],
+  };
+  resolve: Function;
+  reject: Function;
+  future: any;
+  currentResolve: Function;
+  currentRecipient: string | number;
+  constructor(timeout: number = 1000) {
+    this.queue = {};
+    this.emitter = new EventEmitter();
+    this.logicPromise = null;
+    this.timeout = timeout;
+    this.logicTimeoutError = new JarvisError('Timeout on logic end', BOTLOGIC_TIMEOUT);
+  }
+
+  start(fn: Function) {
+    const future = Future.task(() => fn());
+    future.detach();
+    this.future = future;
+  }
+
+  sendMessage(recipient: string | number, message: any, resolveValue?: any) {
+    recipient = recipient.toString();
+    console.log('Jabric sending message to ' + recipient);
+    if (!this.queue[recipient]) this.queue[recipient] = [];
+    const receiveMessagePromise = new Promise((resolve) => {
+      this.queue[recipient].push({
+        resolve, message, recipient,
+      });
+
+      this.emitter.emit('sentMessage', recipient, resolve);
+
+      this.currentRecipient = recipient;
+      this.currentResolve = resolve;
+
+    });
+
+    return receiveMessagePromise.then(() => Promise.resolve(resolveValue));
+  }
+
+  botSends(recipient: string | number) {
+    recipient = recipient.toString();
+    console.log('Retrieving message for ' + recipient);
+    const future = new Future();
+    if(this.currentRecipient === recipient) {
+      const message = this.queue[recipient].shift();
+      (message!.resolve)();
+      future.return(message!.message);
+      console.log('Jabric found message for ' + recipient);
+    }
+
+    return future.wait();
+  }
+
+  userSends(logicPromise: Promise<any>) {
+    this.logicPromise = logicPromise;
   }
 }

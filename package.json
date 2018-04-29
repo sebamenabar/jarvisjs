@@ -4,29 +4,29 @@
   "description": "ChatBot testing framework.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npx babel-node spec/run.js **/**/*.spec.js",
     "example": "babel-node examples/run.js"
   },
   "author": "Sebastian Amenabar <samenabar@uc.cl>",
   "license": "ISC",
   "repository": "https://github.com/sebamenabar/Jarvis.js.git",
   "devDependencies": {
+    "@types/node": "^10.0.0",
     "babel-cli": "^6.26.0",
     "babel-eslint": "^8.2.2",
     "babel-preset-airbnb": "^2.4.0",
     "babel-preset-env": "^1.6.1",
-    "babel-preset-flow": "^6.23.0",
     "eslint": "4.9.0",
     "eslint-config-airbnb-base": "^12.1.0",
-    "eslint-plugin-flowtype": "^2.46.1",
-    "eslint-plugin-import": "2.7.0",
-    "flow-bin": "^0.68.0",
-    "jasmine": "^3.1.0"
+    "eslint-plugin-import": "^2.11.0",
+    "eslint-plugin-jasmine": "^2.9.3",
+    "jasmine": "^3.1.0",
+    "tslint": "^5.9.1",
+    "tslint-config-airbnb-base": "^0.1.0",
+    "tslint-eslint-rules": "^5.1.0",
+    "typescript": "^2.8.3"
   },
   "dependencies": {
-    "@types/bluebird": "^3.5.20",
-    "@types/bluebird-global": "^3.5.5",
-    "@types/node": "^9.6.2",
-    "bluebird": "^3.5.1"
+    "fibers": "^2.0.2"
   }
 }

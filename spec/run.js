@@ -1,8 +1,6 @@
 import Jasmine from 'jasmine';
 
-console.log(__dirname.split('/').reverse()[0]);
-
-const jasmine = new Jasmine();
+const jasmine = new Jasmine({});
 jasmine.loadConfig({
   spec_dir: __dirname.split('/').reverse()[0],
   helpers: [],

@@ -1,13 +1,15 @@
 {
   "extends": [
-    "airbnb-base",
-    "plugin:flowtype/recommended"
+    "airbnb-base"
   ],
   "rules": {
     "no-console": "off"
   },
   "parser": "babel-eslint",
   "plugins": [
-    "flowtype"
-  ]
+    "jasmine"
+  ],
+  "env": {
+    "jasmine": true
+  }
 }
