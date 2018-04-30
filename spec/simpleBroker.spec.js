@@ -8,6 +8,7 @@ async function sendMessage(recipient, message) {
 
 async function botLogic(user, message, broker = { sendMessage }) {
   if (message === 'THROW') throw Error('Error on backend');
+  else if (message === 'TIMEOUT') return new Promise(() => {});
 
   const response = `User ${user.id} sent ${message}`;
   return broker.sendMessage(user, response)
@@ -21,18 +22,18 @@ class FakeBroker extends Jabric {
   }
 
   userSends(sender, message) {
-    super.userSends(botLogic(sender, message, this));
+    console.log('user sending');
+    super.userSends(() => botLogic(sender, message, this));
   }
 
   sendMessage(recipient, message) {
     return super.sendMessage(recipient.id, message, message);
   }
-
 }
 
 const user = { id: 1 };
 describe('Simple example', () => {
-  fit('passes when expecting the correct response', (done) => {
+  it('passes when expecting the correct response', (done) => {
     const jarvis = new FakeBroker();
 
     jarvis.start(() => {
@@ -46,12 +47,12 @@ describe('Simple example', () => {
     });
   });
 
-  fit('fails when backend fails', (done) => {
+  it('fails when backend fails', (done) => {
     const jarvis = new FakeBroker();
 
-    return jarvis.start(() => {
+    jarvis.start(() => {
       jarvis.userSends(user, 'THROW');
-      jarvis.end();
+      expect(() => jarvis.end()).toThrowError('Error on backend');
       done();
     });
   });
@@ -59,13 +60,50 @@ describe('Simple example', () => {
   it('fails when entered an incorrect message', (done) => {
     const jarvis = new FakeBroker();
 
-    return jarvis.start(() => {
+    jarvis.start(() => {
       jarvis.userSends(user, 'Hi');
-      jarvis.botSends(user, '');
+      const spy = spyOn(jarvis, 'botSends');
+      spy.and.callFake((recipient, expectedMessage) => {
+        const sentMessage = Jabric.prototype.botSends.call(jarvis, recipient.id);
+        if (expectedMessage !== sentMessage) throw new Error(`Expected ${sentMessage} to equal ${expectedMessage}`);
+      });
+      expect(() => jarvis.botSends(user, '')).toThrowError('Expected User 1 sent Hi to equal ');
       jarvis.botSends(user, 'BOT LOGIC END');
+      jarvis.end();
       done();
     });
   });
 
+  it('fails when there are enqueued messages', (done) => {
+    const jarvis = new FakeBroker();
 
+    jarvis.start(() => {
+      jarvis.userSends(user, 'Hi');
+      expect(() => jarvis.end()).toThrowError('Bot logic ended but still some messages in queue');
+      done();
+    });
+  });
+
+  fit('fails when user sends a message but the bot still has some in queue', (done) => {
+    const jarvis = new FakeBroker();
+
+    jarvis.start(() => {
+      jarvis.userSends(user, 'One');
+      const response = `User ${user.id} sent One`;
+      jarvis.botSends(user, response);
+      expect(() => jarvis.userSends(user, 'Two')).toThrowError('Bot logic ended but still some messages in queue');
+      done();
+    });
+  });
+
+  it('fails when bot logic promise does not resolve', (done) => {
+    const jarvis = new FakeBroker();
+
+    jarvis.start(() => {
+      jarvis.userSends(user, 'TIMEOUT');
+      jarvis.userSends(user, '');
+      // expect(() => jarvis.userSends(user, '')).toThrowError('Timeout: Bot logic did not resolve');
+      done();
+    });
+  });
 });
